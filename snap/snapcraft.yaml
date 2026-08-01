@@ -1,0 +1,152 @@
+name: navidrome-tak
+title: navidrome-tak
+summary: UnOfficial release of Navidrome
+description: |
+  **Navidrome is an open source web-based music collection server and streamer.**
+  It gives you freedom to listen to your music collection from any browser or mobile device. It's like your personal Spotify!
+
+  * The web interface is accessible by default at http://localhost:4533
+  * See https://www.navidrome.org for more details.
+
+  **Navidrome Release**
+  * 'ffmpeg-tak' and 'mesa-2604' snaps are required as dependencies.
+  * '/var/lib/navidrome' points to '$SNAP_DATA/data'
+  * '/opt/navidrome/music' points to '$SNAP_COMMON/music'
+  * Service is restarted on any condition.
+
+  **Post install commands required to access media folders and see resources :**
+
+  sudo snap connect navidrome-tak:removable-media
+  
+  sudo snap connect navidrome-tak:mount-observe
+  
+  **!!! Files can only be written in a directory owned by 'root' !!!**
+  **!!! Home base directory content is not readable !!!**
+  
+  This is due to current behavior and restrictions of snaps by Canonical.\
+  Check documentation if you want to setup data in /home directory: https://github.com/TehAppKiller/Snapcraft-common-doc/blob/main/README.md#FAQ
+website: https://www.navidrome.org
+source-code: https://github.com/TehAppKiller/navidrome-tak
+issues: https://github.com/TehAppKiller/navidrome-tak/issues
+contact: ['mailto:tehappkiller@proton.me', 'https://mastodon.social/@TehAppKiller']
+donation: https://whydonate.com/en/fundraising/help-teh-devz
+license: MIT
+icon: icon.svg
+grade: stable
+confinement: strict
+base: core26
+adopt-info: navidrome
+platforms:
+  amd64:
+  arm64:
+  armhf:
+  # ppc64el:
+  # s390x:
+  riscv64:
+  
+plugs:
+  ffmpeg:
+    interface: content
+    target: $SNAP/ffmpeg
+    default-provider: ffmpeg-tak # snap used
+    content: ffmpeg # slot name called
+    
+layout:
+  /var/lib/navidrome:
+    symlink: $SNAP_DATA/data
+  /opt/navidrome/music:
+    symlink: $SNAP_COMMON/music
+
+apps:
+  navidrome:
+    extensions: [gpu]
+    command-chain: [snap/command-chain/gpu-2604-wrapper]
+    command: bin/run-navidrome.sh
+    daemon: simple
+    restart-condition: always
+    stop-timeout: 20s # as referenced in navidrome systemd doc
+    plugs:
+      - mount-observe
+      - network
+      - network-bind
+      - removable-media
+      - home # useless for now ; if snaps are allowed to read /home folder one day...
+    environment:
+      LD_LIBRARY_PATH: $SNAP/ffmpeg/usr/lib/:$SNAP/ffmpeg/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/:$SNAP/ffmpeg/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/pulseaudio/:$SNAP/ffmpeg/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/sdl2-classic/:$LD_LIBRARY_PATH
+      PATH: $SNAP/ffmpeg/usr/bin/:$PATH
+
+parts:
+  navidrome:
+    source: .
+    plugin: nil
+    override-pull: |
+    
+      # Architecture
+      case "$CRAFT_ARCH_BUILD_FOR" in
+        amd64) SRC_ARCH="amd64" ;;
+        arm64) SRC_ARCH="arm64" ;;
+        armhf) SRC_ARCH="armv7" ;;
+        riscv64) SRC_ARCH="riscv64" ;;
+      esac
+      
+      # Get Last Release version and Check Snap (with same Source) version
+      src_version=$(curl -sL https://api.github.com/repos/navidrome/navidrome/releases/latest | grep "linux_$SRC_ARCH\.deb" | sed -nre "s/^.*\/download\/v([^\/]*)\/.*/\1/p")
+      echo "Source last release: ${src_version}"
+      snap_last_version=$(curl -sL -H "Snap-Device-Series: 16" "https://api.snapcraft.io/v2/snaps/info/navidrome-tak?architecture=${CRAFT_ARCH_BUILD_FOR}&fields=version" | sed -nre "s/^.*\"stable\"\,\"track\"\:\"latest\"\}\,\"version\"\:\"([^\"]*)\".*/\1/p");
+      echo "Snap last version: ${snap_last_version}"
+      snap_build_with_same_version=$(echo $snap_last_version | sed -nre "s/^($src_version.*).*/\1/p");
+      # Same version ?
+      if [ -z "$snap_build_with_same_version" ]
+      then
+        new_snap_version="${src_version}";
+      else
+        # Get snap build version
+        snap_build=$(echo $snap_build_with_same_version | sed -nre 's/^.*-v([0-9]*).*/\1/p');
+        # Already a build version ?
+        if [ -z "$snap_build" ]
+        then
+          # init @v2
+          new_snap_build="2";
+        else
+          # increment @v+1
+          new_snap_build=$(($snap_build+1));
+        fi
+
+        new_snap_version="${src_version}-v${new_snap_build}";
+      fi
+
+      craftctl set version=$new_snap_version
+      
+      # Pull
+      rm -rf $CRAFT_PART_SRC/{,.[!.],..?}*
+      download_url=$(curl -sL https://api.github.com/repos/navidrome/navidrome/releases/latest | grep "linux_$SRC_ARCH\.tar.gz" | sed -nre "s/^.*\"browser_download_url\": \"([^\"]*)\".*/\1/p")
+      wget "${download_url}" -O srcfile
+      tar xvf srcfile
+      
+      # Re-Organize
+      mkdir -p "$CRAFT_PART_INSTALL/usr/bin/"
+      mv navidrome "$CRAFT_PART_INSTALL/usr/bin/"
+      mkdir -p "$CRAFT_PART_INSTALL/usr/share/doc/navidrome"
+      mv LICENSE "$CRAFT_PART_INSTALL/usr/share/doc/navidrome"
+      mv README.md "$CRAFT_PART_INSTALL/usr/share/doc/navidrome"
+      
+      # Add Default Config file
+      wget https://raw.githubusercontent.com/navidrome/navidrome/refs/tags/v${src_version}/release/linux/navidrome.toml
+      mkdir -p "$CRAFT_PART_INSTALL/etc/navidrome"
+      mv navidrome.toml "$CRAFT_PART_INSTALL/etc/navidrome"
+      
+      # Clean
+      rm -f srcfile
+      
+      craftctl default
+    build-packages:
+      - curl
+      - wget
+    override-prime: |
+      craftctl default
+      chmod +rx $CRAFT_PRIME/bin/run-navidrome.sh
+
+  local:
+    plugin: dump
+    source: snap/local
+      
