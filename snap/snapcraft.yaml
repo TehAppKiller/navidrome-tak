@@ -74,6 +74,12 @@ apps:
     environment:
       LD_LIBRARY_PATH: $SNAP/ffmpeg/usr/lib/:$SNAP/ffmpeg/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/:$SNAP/ffmpeg/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/pulseaudio/:$SNAP/ffmpeg/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/sdl2-classic/:$LD_LIBRARY_PATH
       PATH: $SNAP/ffmpeg/usr/bin/:$PATH
+      
+  # Snap store "Launch" button Open webservice url in default browser
+  navidrome-tak:
+    command: bin/launch-browser.sh
+    plugs:
+      - desktop
 
 parts:
   navidrome:
@@ -145,6 +151,7 @@ parts:
     override-prime: |
       craftctl default
       chmod +rx $CRAFT_PRIME/bin/run-navidrome.sh
+      chmod +rx $CRAFT_PRIME/bin/launch-browser.sh
 
   local:
     plugin: dump

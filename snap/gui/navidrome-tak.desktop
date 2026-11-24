@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Navidrome-tak
+Comment=Open webUI
+Type=Application
+Exec=navidrome-tak
+Icon=${SNAP}/meta/gui/icon.svg
